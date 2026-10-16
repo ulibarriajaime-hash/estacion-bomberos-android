@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Estación de bomberos</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Inicio de la app: tres accesos grandes, una columna en teléfono, mismo lenguaje de plano que las páginas. */
+:root{
+  --bg:#eef1f6; --surface:#ffffff; --line:#ccd3de; --fg:#121a29; --muted:#566178; --accent:#c8281e; --focus:#1f6fc2;
+  --z1:#2f6fbd; --z2:#c8281e; --z3:#23805f;
+  --font-display:'Barlow Condensed','Arial Narrow',sans-serif;
+  --font-body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e131d; --surface:#161d2b; --line:#2c3749; --fg:#e6ebf4; --muted:#93a0b8; --accent:#ef5a4d; --focus:#6cb0f5;
+    --z1:#6aa7ec; --z2:#ef6b5f; --z3:#4cc29a; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e131d; --surface:#161d2b; --line:#2c3749; --fg:#e6ebf4; --muted:#93a0b8; --accent:#ef5a4d; --focus:#6cb0f5;
+  --z1:#6aa7ec; --z2:#ef6b5f; --z3:#4cc29a; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.45 var(--font-body);
+  padding-block:28px 40px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px))}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.wrap{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+.eyebrow{margin:0 0 4px;font:600 13px var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+h1{margin:0;font:700 44px/1 var(--font-display);letter-spacing:.02em;text-transform:uppercase;text-wrap:balance}
+.sub{margin:8px 0 0;color:var(--muted);max-width:52ch}
+.list{display:flex;flex-direction:column;gap:12px}
+a.card{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:4px 14px;align-items:center;padding:16px;
+  background:var(--surface);border:1px solid var(--line);border-left:6px solid var(--zc);border-radius:8px;
+  color:inherit;text-decoration:none;min-height:88px}
+a.card:active{background:color-mix(in srgb,var(--zc) 8%,var(--surface))}
+.code{font:500 12px var(--font-mono);color:var(--zc);letter-spacing:.06em;grid-row:1 / span 2;align-self:start;padding-top:4px}
+.card h2{margin:0;font:700 24px/1.1 var(--font-display);letter-spacing:.04em;text-transform:uppercase}
+.card p{margin:0;color:var(--muted);font-size:14px;grid-column:2}
+.go{grid-column:3;grid-row:1 / span 2;font:600 22px var(--font-display);color:var(--muted)}
+.note{margin:0;color:var(--muted);font-size:13px}
+@media (max-width:420px){h1{font-size:36px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Programa arquitectónico</p>
+    <h1>Estación de bomberos</h1>
+    <p class="sub">Tres herramientas de trabajo. Todo se guarda en este teléfono y funciona sin conexión.</p>
+  </header>
+
+  <nav class="list" aria-label="Herramientas">
+    <a class="card" href="programa.html" style="--zc:var(--z1)">
+      <span class="code">01</span>
+      <h2>Programa de espacios</h2>
+      <p>Tabla dinámica, diagrama de flujo y matriz de relaciones entre los espacios.</p>
+      <span class="go" aria-hidden="true">›</span>
+    </a>
+    <a class="card" href="flujos.html" style="--zc:var(--z2)">
+      <span class="code">02</span>
+      <h2>Flujos de la estación</h2>
+      <p>Recorridos editables y simulación paso a paso de una salida de emergencia.</p>
+      <span class="go" aria-hidden="true">›</span>
+    </a>
+    <a class="card" href="zonificacion.html" style="--zc:var(--z3)">
+      <span class="code">03</span>
+      <h2>Zonificación del terreno</h2>
+      <p>Plano del polígono con bloques por zona, restricciones, accesos y superficies.</p>
+      <span class="go" aria-hidden="true">›</span>
+    </a>
+  </nav>
+
+  <p class="note">Usa el botón atrás del teléfono para volver a este inicio. Los archivos que descargues se guardan en la carpeta Descargas.</p>
+</div>
+</body>
+</html>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- DayNight para que las páginas reciban prefers-color-scheme según el tema del teléfono. -->
+    <style name="Theme.Bomberos" parent="android:Theme.DeviceDefault.DayNight">
+        <item name="android:windowActionBar">false</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowBackground">@color/page_bg</item>
+        <item name="android:statusBarColor">@color/page_bg</item>
+        <item name="android:navigationBarColor">@color/page_bg</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+</resources>

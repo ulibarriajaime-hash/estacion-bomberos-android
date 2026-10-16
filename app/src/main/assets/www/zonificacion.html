@@ -1,0 +1,648 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><script src="shim.js"></script></head><body><title>Zonificación del terreno</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Diseño: lienzo de plano a la izquierda (terreno, restricciones, bloques) y panel de datos a la derecha.
+   Mismo lenguaje que el programa: papel gris azulado, tinta oscura y rojo de emergencia como acento. */
+:root{
+  --bg:#eef1f6; --surface:#ffffff; --surface-2:#e6eaf1; --line:#ccd3de;
+  --fg:#121a29; --muted:#566178; --accent:#c8281e; --accent-ink:#ffffff; --focus:#1f6fc2; --bad:#c4166b;
+  --z-pub:#2f6fbd; --z-ope:#c8281e; --z-hab:#23805f; --z-ent:#b86f0a; --z-ser:#7656b2;
+  --z-man:#667286; --z-est:#4a6a8a; --z-ver:#5a9a3c;
+  --a-veh:#c8281e; --a-peat:#1f6fc2; --a-mar:#0c8da6;
+  --font-display:'Barlow Condensed','Arial Narrow',sans-serif;
+  --font-body:'IBM Plex Sans',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0e131d; --surface:#161d2b; --surface-2:#1e2738; --line:#2c3749;
+    --fg:#e6ebf4; --muted:#93a0b8; --accent:#ef5a4d; --accent-ink:#1a0a08; --focus:#6cb0f5; --bad:#ff6fb0;
+    --z-pub:#6aa7ec; --z-ope:#ef6b5f; --z-hab:#4cc29a; --z-ent:#e9a24a; --z-ser:#a58ae0;
+    --z-man:#98a5ba; --z-est:#7fa3c7; --z-ver:#8cc66a;
+    --a-veh:#ff6a5e; --a-peat:#6aa7ec; --a-mar:#4cc4dc;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0e131d; --surface:#161d2b; --surface-2:#1e2738; --line:#2c3749;
+  --fg:#e6ebf4; --muted:#93a0b8; --accent:#ef5a4d; --accent-ink:#1a0a08; --focus:#6cb0f5; --bad:#ff6fb0;
+  --z-pub:#6aa7ec; --z-ope:#ef6b5f; --z-hab:#4cc29a; --z-ent:#e9a24a; --z-ser:#a58ae0;
+  --z-man:#98a5ba; --z-est:#7fa3c7; --z-ver:#8cc66a;
+  --a-veh:#ff6a5e; --a-peat:#6aa7ec; --a-mar:#4cc4dc;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 var(--font-body);
+  padding-block:20px 56px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));
+  padding-right:max(16px,env(safe-area-inset-right,0px))}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.wrap{max-width:1360px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.mono{font-family:var(--font-mono)}
+.muted{color:var(--muted)}
+.eyebrow{margin:0 0 2px;font:600 13px var(--font-display);letter-spacing:.14em;text-transform:uppercase;color:var(--accent)}
+h1{margin:0;font:700 40px/1 var(--font-display);letter-spacing:.02em;text-transform:uppercase;text-wrap:balance}
+.sub{margin:6px 0 0;color:var(--muted)}
+h2{margin:0 0 8px;font:700 19px/1.1 var(--font-display);letter-spacing:.06em;text-transform:uppercase}
+.hint{margin:0;color:var(--muted);max-width:70ch;font-size:13px}
+
+.grid{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:20px;align-items:start}
+.main{display:flex;flex-direction:column;gap:10px;min-width:0}
+.side{display:flex;flex-direction:column;gap:18px;min-width:0}
+.side>section{border-top:2px solid var(--fg);padding-top:12px;min-width:0}
+@media (max-width:1020px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+.bar{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.btn{min-height:36px;padding:0 12px;background:var(--surface);border:1px solid var(--line);border-radius:6px;cursor:pointer}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.danger{color:var(--bad)}
+.chk{display:inline-flex;align-items:center;gap:6px;min-height:36px;cursor:pointer}
+.chk input{width:16px;height:16px;accent-color:var(--accent)}
+select,.in{min-height:36px;padding:5px 9px;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field label{font:600 11px var(--font-body);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.row .field{flex:1 1 90px}
+
+.stage{position:relative;height:min(76vh,720px);min-height:440px;background:var(--surface);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.zs{display:block;width:100%;height:100%;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+.zs:active{cursor:grabbing}
+.north{position:absolute;top:10px;right:12px;width:34px;color:var(--fg);pointer-events:none}
+.scalebar{position:absolute;left:14px;bottom:12px;display:flex;flex-direction:column;gap:3px;font:500 11px var(--font-mono);color:var(--fg);pointer-events:none}
+.scalebar i{display:block;height:6px;border:2px solid var(--fg);border-top:0}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--muted);font-size:13px}
+.legend b{display:inline-grid;place-items:center;width:20px;height:20px;border-radius:50%;color:#fff;font:600 11px var(--font-mono);margin-right:6px}
+
+/* Dibujo */
+.gm{stroke:var(--line);stroke-width:1;fill:none}
+.gM{stroke:var(--muted);stroke-width:1;fill:none;opacity:.55}
+.terr{fill:color-mix(in srgb,var(--fg) 4%,var(--surface));stroke:var(--fg);stroke-width:2.2;stroke-linejoin:round}
+.bld{fill:none;stroke:var(--accent);stroke-width:1.5;stroke-dasharray:7 5}
+.dim{font:500 12px var(--font-mono);fill:var(--fg);text-anchor:middle}
+.ename{font:700 12px var(--font-display);letter-spacing:.18em;fill:var(--muted);text-anchor:middle;text-transform:uppercase}
+.vlab{font:600 12px var(--font-mono);fill:var(--fg);text-anchor:middle}
+.blk{stroke-width:1.8;stroke-linejoin:round;cursor:move}
+.blk.bad{stroke:var(--bad)!important;stroke-dasharray:7 4;stroke-width:2.6}
+.blk.sel{stroke-width:3}
+.bt{font:600 12px var(--font-body);fill:var(--fg);text-anchor:middle;pointer-events:none}
+.ba{font:500 11px var(--font-mono);fill:var(--fg);text-anchor:middle;pointer-events:none}
+.t-pub{fill:color-mix(in srgb,var(--z-pub) 24%,var(--surface));stroke:var(--z-pub)}
+.t-ope{fill:color-mix(in srgb,var(--z-ope) 24%,var(--surface));stroke:var(--z-ope)}
+.t-hab{fill:color-mix(in srgb,var(--z-hab) 24%,var(--surface));stroke:var(--z-hab)}
+.t-ent{fill:color-mix(in srgb,var(--z-ent) 24%,var(--surface));stroke:var(--z-ent)}
+.t-ser{fill:color-mix(in srgb,var(--z-ser) 24%,var(--surface));stroke:var(--z-ser)}
+.t-man{fill:color-mix(in srgb,var(--z-man) 22%,var(--surface));stroke:var(--z-man)}
+.t-est{fill:color-mix(in srgb,var(--z-est) 22%,var(--surface));stroke:var(--z-est)}
+.t-ver{fill:color-mix(in srgb,var(--z-ver) 24%,var(--surface));stroke:var(--z-ver)}
+.hd{fill:var(--surface);stroke:var(--accent);stroke-width:2;cursor:nwse-resize}
+.vt{fill:var(--surface);stroke:var(--accent);stroke-width:2.4;cursor:move}
+.vd{fill:var(--fg)}
+.ac{cursor:ew-resize;stroke:var(--surface);stroke-width:2}
+.ac-veh{fill:var(--a-veh)}.ac-peat{fill:var(--a-peat)}.ac-mar{fill:var(--a-mar)}
+.acl{font:600 11px var(--font-mono);fill:#fff;text-anchor:middle;pointer-events:none}
+
+/* Panel */
+table.st{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+table.st th{font:600 11px var(--font-body);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);text-align:left;padding:4px 6px 6px 0}
+table.st td{padding:4px 6px 4px 0;border-top:1px solid var(--line);vertical-align:middle}
+table.st td.n{text-align:right;white-space:nowrap}
+table.st .in{width:74px;min-height:32px;text-align:right}
+.chg{color:var(--bad)}
+.kv{display:grid;grid-template-columns:1fr auto;gap:4px 12px;margin:10px 0 0;font-variant-numeric:tabular-nums}
+.kv b{text-align:right}
+.blist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.brow{display:flex;align-items:center;gap:8px;width:100%;min-height:38px;padding:4px 6px;background:none;border:0;border-top:1px solid var(--line);text-align:left;cursor:pointer}
+.brow:hover{background:var(--surface-2)}
+.brow.on{background:var(--surface-2);box-shadow:inset 3px 0 0 var(--accent)}
+.brow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.brow .ar{font:500 12px var(--font-mono);color:var(--muted)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;flex:none}
+.pill{font:600 11px var(--font-body);padding:2px 8px;border-radius:999px;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.pill.bad{background:color-mix(in srgb,var(--bad) 16%,var(--surface));color:var(--bad)}
+.dl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px;font-size:13px}
+.dl li{display:flex;justify-content:space-between;gap:12px}
+.dl b{font-family:var(--font-mono);font-weight:500;white-space:nowrap}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));max-width:min(92vw,520px);
+  padding:10px 16px;background:var(--fg);color:var(--bg);border-radius:8px;z-index:50;text-align:center}
+@media (max-width:560px){h1{font-size:32px}.stage{min-height:400px}}
+</style>
+
+<div class="wrap">
+  <header>
+    <p class="eyebrow">Estación de bomberos</p>
+    <h1>Zonificación del terreno</h1>
+    <p class="sub" id="sub"></p>
+  </header>
+
+  <div class="grid">
+    <div class="main">
+      <div class="bar">
+        <label class="chk"><input type="checkbox" id="chkVtx"> Editar vértices</label>
+        <label class="chk"><input type="checkbox" id="chkBld" checked> Área edificable</label>
+        <label class="chk"><input type="checkbox" id="chkGrid" checked> Cuadrícula</label>
+        <div class="field"><label for="snapSel" style="position:absolute;left:-9999px">Ajuste</label>
+          <select id="snapSel" aria-label="Ajuste al mover"><option value="0">Sin ajuste</option><option value="1" selected>Ajuste 1 m</option><option value="5">Ajuste 5 m</option></select></div>
+        <button class="btn" id="zOut" aria-label="Alejar">−</button>
+        <button class="btn" id="zFit">Ajustar vista</button>
+        <button class="btn" id="zIn" aria-label="Acercar">+</button>
+      </div>
+      <div class="stage" id="stage">
+        <svg class="zs" id="zsvg" tabindex="0" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plano del terreno con la zonificación"></svg>
+        <svg class="north" viewBox="0 0 34 52" aria-label="Norte hacia arriba"><path d="M17 4 L27 40 L17 33 L7 40 Z" fill="currentColor"/><text x="17" y="51" text-anchor="middle" font-family="IBM Plex Mono,monospace" font-size="12" font-weight="600" fill="currentColor">N</text></svg>
+        <div class="scalebar" id="scale"><span id="scaleTxt"></span><i id="scaleBar"></i></div>
+      </div>
+      <div class="legend">
+        <span><b style="background:var(--a-veh)">V</b>Acceso vehicular</span>
+        <span><b style="background:var(--a-peat)">P</b>Acceso peatonal</span>
+        <span><b style="background:var(--a-mar)">M</b>Acceso a marina</span>
+        <span>Arrastra bloques y accesos. Arrastra el fondo para mover el plano y usa la rueda para acercar.</span>
+      </div>
+    </div>
+
+    <aside class="side">
+      <section>
+        <h2>Terreno</h2>
+        <table class="st" id="sideTbl"></table>
+        <div class="kv" id="areas"></div>
+        <p class="hint" style="margin-top:10px">Las restricciones son valores de ejemplo. Sustitúyelas por las del uso de suelo de tu predio.</p>
+        <div class="bar" style="margin-top:10px"><button class="btn" id="resetTerr">Restablecer terreno</button></div>
+      </section>
+
+      <section>
+        <h2>Bloques de zona</h2>
+        <ul class="blist" id="blkList"></ul>
+        <div class="bar" style="margin-top:10px">
+          <div class="field" style="flex:1"><label for="addType">Agregar</label>
+            <select id="addType"></select></div>
+          <button class="btn" id="addBtn" style="align-self:flex-end">Agregar bloque</button>
+        </div>
+      </section>
+
+      <section id="selSec">
+        <h2>Bloque seleccionado</h2>
+        <div id="blkForm"></div>
+      </section>
+
+      <section>
+        <h2>Resumen</h2>
+        <div class="kv" id="tot"></div>
+        <h2 style="margin-top:16px">Distancias</h2>
+        <ul class="dl" id="dist"></ul>
+      </section>
+
+      <section>
+        <h2>Exportar</h2>
+        <div class="bar">
+          <button class="btn primary" id="exSvg">Descargar SVG</button>
+          <button class="btn" id="exPng">Descargar PNG</button>
+          <button class="btn" id="exCsv">Descargar CSV</button>
+        </div>
+        <div class="bar" style="margin-top:10px"><button class="btn danger" id="resetAll">Restablecer todo</button></div>
+      </section>
+    </aside>
+  </div>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script>
+(function(){
+'use strict';
+
+/*GEOM-START*/
+var V0=[[25.35,168.64],[111.82,99.68],[75.73,0],[16.13,21.68],[0,153.22]];
+var EDGE_ORIG=[110.60,106.01,63.42,132.52,29.67];
+var EDGE_NAMES=['Lado noreste','Lado este','Frente (avenida)','Lado oeste','Lado marina'];
+function r2(v){return Math.round(v*100)/100;}
+function polyArea(p){var a=0;for(var i=0;i<p.length;i++){var q=p[(i+1)%p.length];a+=p[i][0]*q[1]-q[0]*p[i][1];}return a/2;}
+function dist(a,b){return Math.hypot(a[0]-b[0],a[1]-b[1]);}
+function edgeAngle(P,i){var a=P[i],b=P[(i+1)%P.length];return Math.atan2(b[1]-a[1],b[0]-a[0])*180/Math.PI;}
+function rotPt(x,y,deg){var r=deg*Math.PI/180,c=Math.cos(r),s=Math.sin(r);return [x*c-y*s,x*s+y*c];}
+function corners(b){
+  var hw=b.w/2,hd=b.d/2;
+  return [[-hw,-hd],[hw,-hd],[hw,hd],[-hw,hd]].map(function(c){var r=rotPt(c[0],c[1],b.rot);return [b.cx+r[0],b.cy+r[1]];});
+}
+function pip(pt,poly){
+  var x=pt[0],y=pt[1],ins=false;
+  for(var i=0,j=poly.length-1;i<poly.length;j=i++){
+    var xi=poly[i][0],yi=poly[i][1],xj=poly[j][0],yj=poly[j][1];
+    if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))ins=!ins;
+  }
+  return ins;
+}
+function satOverlap(A,B){
+  var polys=[A,B];
+  for(var k=0;k<2;k++){
+    var P=polys[k];
+    for(var i=0;i<P.length;i++){
+      var a=P[i],b=P[(i+1)%P.length],ax=-(b[1]-a[1]),ay=b[0]-a[0],l=Math.hypot(ax,ay);
+      ax/=l;ay/=l;
+      var mn1=1e18,mx1=-1e18,mn2=1e18,mx2=-1e18;
+      A.forEach(function(p){var v=p[0]*ax+p[1]*ay;if(v<mn1)mn1=v;if(v>mx1)mx1=v;});
+      B.forEach(function(p){var v=p[0]*ax+p[1]*ay;if(v<mn2)mn2=v;if(v>mx2)mx2=v;});
+      if(mx1<=mn2+1e-6||mx2<=mn1+1e-6)return false;
+    }
+  }
+  return true;
+}
+function offsetPoly(P,d){
+  var n=P.length,sg=polyArea(P)>0?1:-1,L=[],i;
+  for(i=0;i<n;i++){
+    var a=P[i],b=P[(i+1)%n],dx=b[0]-a[0],dy=b[1]-a[1],len=Math.hypot(dx,dy)||1e-9;
+    var nx=sg>0?-dy/len:dy/len,ny=sg>0?dx/len:-dx/len;
+    L.push({px:a[0]+nx*d[i],py:a[1]+ny*d[i],dx:dx/len,dy:dy/len});
+  }
+  var out=[];
+  for(i=0;i<n;i++){
+    var l1=L[(i-1+n)%n],l2=L[i],cr=l1.dx*l2.dy-l1.dy*l2.dx;
+    if(Math.abs(cr)<1e-9)return null;
+    var t=((l2.px-l1.px)*l2.dy-(l2.py-l1.py)*l2.dx)/cr;
+    out.push([l1.px+l1.dx*t,l1.py+l1.dy*t]);
+  }
+  if(polyArea(out)*sg<=0)return null;
+  return out;
+}
+function inFrame(o,ang,s,t){var r=ang*Math.PI/180,c=Math.cos(r),sn=Math.sin(r);return [o[0]+s*c-t*sn,o[1]+s*sn+t*c];}
+function normAng(a){return ((a+180)%360+360)%360-180;}
+function mkBlock(id,name,type,c,w,d,rot){return {id:id,name:name,type:type,cx:r2(c[0]),cy:r2(c[1]),w:w,d:d,rot:r2(normAng(rot))};}
+function defaultState(){
+  var P=V0.map(function(c){return c.slice();});
+  var fa=edgeAngle(P,2)+180,D=P[3],ab=edgeAngle(P,0),A=P[0];
+  var bl=[];
+  bl.push(mkBlock('b1','Zona pública','pub',inFrame(D,fa,14,15),22,18,fa));
+  bl.push(mkBlock('b2','Patio de maniobras','man',inFrame(D,fa,43,15),32,18,fa));
+  bl.push(mkBlock('b3','Zona operativa','ope',inFrame(D,fa,36,38),44,26,fa));
+  bl.push(mkBlock('b4','Zona habitacional','hab',inFrame(D,fa,32,64.5),36,24,fa));
+  bl.push(mkBlock('b5','Zona de entrenamiento','ent',inFrame(A,ab,36,-21.5),56,36,ab));
+  bl.push(mkBlock('b6','Zona de servicios','ser',[91,90],20,16,0));
+  return {verts:P,setb:[3,3,5,3,3],blocks:bl,nextId:7,
+    acc:{veh:{e:2,t:0.32},peat:{e:2,t:0.78},mar:{e:4,t:0.5}}};
+}
+/*GEOM-END*/
+
+/* ---------- Utilidades ---------- */
+var NS='http://www.w3.org/2000/svg';
+function $(s){return document.querySelector(s);}
+function esc(s){return String(s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+function fm(v,d){return v.toLocaleString('es-MX',{minimumFractionDigits:d||0,maximumFractionDigits:d||0});}
+function lsGet(k){try{return JSON.parse(localStorage.getItem(k));}catch(e){return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+var toastT=null;
+function toast(m){var t=$('#toast');t.textContent=m;t.hidden=false;clearTimeout(toastT);toastT=setTimeout(function(){t.hidden=true;},3200);}
+
+var TYPES={
+  pub:{name:'Zona pública',w:22,d:18},ope:{name:'Zona operativa',w:40,d:24},hab:{name:'Zona habitacional',w:36,d:24},
+  ent:{name:'Zona de entrenamiento',w:50,d:30},ser:{name:'Zona de servicios',w:20,d:16},
+  man:{name:'Patio de maniobras',w:30,d:16},est:{name:'Estacionamiento',w:24,d:12},ver:{name:'Área verde',w:20,d:20}
+};
+var ACC={veh:{letter:'V',name:'Acceso vehicular'},peat:{letter:'P',name:'Acceso peatonal'},mar:{letter:'M',name:'Acceso a marina'}};
+var KEY='bomberos-zonificacion-v1';
+
+var state=defaultState();
+(function(){var s=lsGet(KEY);if(s&&s.verts&&s.verts.length===5&&s.blocks&&s.setb&&s.acc){state=s;}})();
+var sel=state.blocks.length?state.blocks[0].id:null;
+var view={cx:0,cy:0,k:1},W=800,H=600;
+var svg=$('#zsvg'),stage=$('#stage');
+var saveT=null;
+function save(){clearTimeout(saveT);saveT=setTimeout(function(){lsSet(KEY,state);},250);}
+function snap(v){var st=+$('#snapSel').value;return st?Math.round(v/st)*st:v;}
+function getBlock(id){for(var i=0;i<state.blocks.length;i++)if(state.blocks[i].id===id)return state.blocks[i];return null;}
+
+/* ---------- Cálculos derivados ---------- */
+function derived(){
+  var build=offsetPoly(state.verts,state.setb);
+  var d={build:build,terrA:Math.abs(polyArea(state.verts)),buildA:build?Math.abs(polyArea(build)):0,st:{}};
+  var region=build||state.verts;
+  state.blocks.forEach(function(b){
+    var cs=corners(b),out=cs.some(function(c){return !pip(c,region);}),ov=[];
+    state.blocks.forEach(function(o){if(o.id!==b.id&&satOverlap(cs,corners(o)))ov.push(o);});
+    d.st[b.id]={out:out,ov:ov,area:b.w*b.d};
+  });
+  return d;
+}
+function accPos(key){
+  var a=state.acc[key],P=state.verts,A=P[a.e],B=P[(a.e+1)%5];
+  return [A[0]+(B[0]-A[0])*a.t,A[1]+(B[1]-A[1])*a.t];
+}
+
+/* ---------- Vista ---------- */
+function sx(x){return (x-view.cx)*view.k+W/2;}
+function sy(y){return H/2-(y-view.cy)*view.k;}
+function toW(px,py){return [(px-W/2)/view.k+view.cx,(H/2-py)/view.k+view.cy];}
+function measure(){W=Math.max(300,stage.clientWidth);H=Math.max(300,stage.clientHeight);svg.setAttribute('viewBox','0 0 '+W+' '+H);}
+function fitView(){
+  var xs=state.verts.map(function(v){return v[0];}),ys=state.verts.map(function(v){return v[1];});
+  var mnx=Math.min.apply(null,xs),mxx=Math.max.apply(null,xs),mny=Math.min.apply(null,ys),mxy=Math.max.apply(null,ys);
+  view.k=Math.max(0.2,Math.min((W-130)/(mxx-mnx||1),(H-130)/(mxy-mny||1)));
+  view.cx=(mnx+mxx)/2;view.cy=(mny+mxy)/2;
+}
+function zoomAt(f,px,py){
+  var w=toW(px,py);view.k=Math.max(0.3,Math.min(60,view.k*f));
+  view.cx=w[0]-(px-W/2)/view.k;view.cy=w[1]+(py-H/2)/view.k;
+}
+
+/* ---------- Dibujo ---------- */
+function pts(arr){return arr.map(function(p){return sx(p[0]).toFixed(1)+','+sy(p[1]).toFixed(1);}).join(' ');}
+function buildMarkup(o){
+  o=o||{};
+  var d=o.d||derived(),h='',P=state.verts,i;
+  if($('#chkGrid').checked||o.clean){
+    var step=10;if(view.k*step<7)step=50;if(view.k*step<7)step=100;
+    var x0=view.cx-W/2/view.k,x1=view.cx+W/2/view.k,y0=view.cy-H/2/view.k,y1=view.cy+H/2/view.k,pm='',pM='',v;
+    for(v=Math.ceil(x0/step)*step;v<=x1;v+=step){var X=sx(v).toFixed(1),seg='M'+X+',0V'+H;if(v%50===0)pM+=seg;else pm+=seg;}
+    for(v=Math.ceil(y0/step)*step;v<=y1;v+=step){var Y=sy(v).toFixed(1),sg='M0,'+Y+'H'+W;if(v%50===0)pM+=sg;else pm+=sg;}
+    h+='<path class="gm" d="'+pm+'"/><path class="gM" d="'+pM+'"/>';
+  }
+  h+='<polygon class="terr" points="'+pts(P)+'"/>';
+  if(d.build&&($('#chkBld').checked||o.clean))h+='<polygon class="bld" points="'+pts(d.build)+'"/>';
+  var cen=[0,0];P.forEach(function(p){cen[0]+=p[0]/5;cen[1]+=p[1]/5;});
+  var cs=[sx(cen[0]),sy(cen[1])];
+  for(i=0;i<5;i++){
+    var A=[sx(P[i][0]),sy(P[i][1])],B=[sx(P[(i+1)%5][0]),sy(P[(i+1)%5][1])];
+    var mx=(A[0]+B[0])/2,my=(A[1]+B[1])/2,dx=B[0]-A[0],dy=B[1]-A[1],l=Math.hypot(dx,dy)||1;
+    var nx=-dy/l,ny=dx/l;if((mx-cs[0])*nx+(my-cs[1])*ny<0){nx=-nx;ny=-ny;}
+    var ang=Math.atan2(dy,dx)*180/Math.PI;if(ang>90)ang-=180;if(ang<-90)ang+=180;
+    h+='<text class="dim" transform="translate('+(mx+nx*16).toFixed(1)+','+(my+ny*16).toFixed(1)+') rotate('+ang.toFixed(1)+')" dominant-baseline="central">'+fm(dist(P[i],P[(i+1)%5]),2)+' m</text>';
+    if(i===2||i===4){
+      h+='<text class="ename" transform="translate('+(mx+nx*38).toFixed(1)+','+(my+ny*38).toFixed(1)+') rotate('+ang.toFixed(1)+')" dominant-baseline="central">'+(i===2?'Avenida':'Marina')+'</text>';
+    }
+  }
+  var order=state.blocks.slice().sort(function(a,b){return (a.id===sel)-(b.id===sel);});
+  order.forEach(function(b){
+    var st=d.st[b.id],bad=st.out||st.ov.length,isSel=b.id===sel&&!o.clean;
+    h+='<polygon class="blk t-'+b.type+(bad?' bad':'')+(isSel?' sel':'')+'" data-k="blk" data-id="'+b.id+'" points="'+pts(corners(b))+'"/>';
+    var ccx=sx(b.cx),ccy=sy(b.cy);
+    h+='<text class="bt" x="'+ccx.toFixed(1)+'" y="'+(ccy-2).toFixed(1)+'">'+esc(b.name)+'</text>';
+    h+='<text class="ba" x="'+ccx.toFixed(1)+'" y="'+(ccy+13).toFixed(1)+'">'+fm(st.area)+' m²</text>';
+  });
+  Object.keys(ACC).forEach(function(k){
+    var p=accPos(k),X=sx(p[0]),Y=sy(p[1]);
+    h+='<g data-k="acc" data-id="'+k+'"><circle class="ac ac-'+k+'" cx="'+X.toFixed(1)+'" cy="'+Y.toFixed(1)+'" r="11"/><text class="acl" x="'+X.toFixed(1)+'" y="'+(Y+4).toFixed(1)+'">'+ACC[k].letter+'</text><title>'+ACC[k].name+'</title></g>';
+  });
+  if(!o.clean){
+    var b=getBlock(sel);
+    if(b){
+      corners(b).forEach(function(c,ix){
+        var sg=[[-1,-1],[1,-1],[1,1],[-1,1]][ix];
+        h+='<rect class="hd" data-k="rz" data-c="'+sg[0]+','+sg[1]+'" x="'+(sx(c[0])-5).toFixed(1)+'" y="'+(sy(c[1])-5).toFixed(1)+'" width="10" height="10" rx="2"/>';
+      });
+    }
+    if($('#chkVtx').checked){
+      for(i=0;i<5;i++){
+        var X=sx(P[i][0]),Y=sy(P[i][1]),ox=X-cs[0],oy=Y-cs[1],ol=Math.hypot(ox,oy)||1;
+        h+='<circle class="vt" data-k="vtx" data-i="'+i+'" cx="'+X.toFixed(1)+'" cy="'+Y.toFixed(1)+'" r="8"/>';
+        h+='<text class="vlab" x="'+(X+ox/ol*22).toFixed(1)+'" y="'+(Y+oy/ol*22+4).toFixed(1)+'">'+'ABCDE'[i]+'</text>';
+      }
+    }
+  } else {
+    h+='<path d="M'+(W-34)+',14 l8,30 l-8,-6 l-8,6 Z" class="vd"/><text class="vlab" x="'+(W-34)+'" y="62">N</text>';
+    var sc=scaleInfo();
+    h+='<path class="gM" style="opacity:1;stroke:var(--fg);stroke-width:2" d="M14,'+(H-16)+'v6h'+sc.px+'v-6"/><text class="vlab" style="text-anchor:start" x="14" y="'+(H-26)+'">'+sc.m+' m</text>';
+  }
+  return h;
+}
+function scaleInfo(){
+  var c=[5,10,20,25,50,100,200],m=c[0];
+  for(var i=0;i<c.length;i++){m=c[i];if(c[i]*view.k>=70)break;}
+  return {m:m,px:Math.round(m*view.k)};
+}
+function render(){
+  var d=derived();
+  svg.innerHTML=buildMarkup({d:d});
+  var sc=scaleInfo();$('#scaleBar').style.width=sc.px+'px';$('#scaleTxt').textContent=sc.m+' m';
+  return d;
+}
+
+/* ---------- Panel ---------- */
+function buildSide(){
+  var h='<thead><tr><th>Lado</th><th class="n">Medida</th><th class="n">Restricción</th></tr></thead><tbody>';
+  for(var i=0;i<5;i++){
+    h+='<tr><td>'+esc(EDGE_NAMES[i])+'</td><td class="n"><span id="len'+i+'"></span></td><td class="n"><input class="in" type="number" min="0" step="0.5" id="sb'+i+'" value="'+state.setb[i]+'" aria-label="Restricción en '+esc(EDGE_NAMES[i])+' (m)"></td></tr>';
+  }
+  $('#sideTbl').innerHTML=h+'</tbody>';
+}
+function updateSide(d){
+  for(var i=0;i<5;i++){
+    var cur=dist(state.verts[i],state.verts[(i+1)%5]),el=$('#len'+i),ch=Math.abs(cur-EDGE_ORIG[i])>0.05;
+    el.innerHTML=ch?'<span class="chg" title="Medida original '+fm(EDGE_ORIG[i],2)+' m">'+fm(cur,2)+' m</span>':fm(cur,2)+' m';
+  }
+  $('#areas').innerHTML='<span>Superficie del terreno</span><b>'+fm(d.terrA)+' m²</b>'+
+    '<span>Área edificable</span><b>'+(d.build?fm(d.buildA)+' m²':'Sin área')+'</b>';
+}
+function updateList(d){
+  var h='';
+  state.blocks.forEach(function(b){
+    var st=d.st[b.id],pill=st.out?'<span class="pill bad">Fuera</span>':(st.ov.length?'<span class="pill bad">Traslape</span>':'');
+    h+='<li><button class="brow'+(b.id===sel?' on':'')+'" data-id="'+b.id+'"><i class="dot" style="background:var(--z-'+b.type+')"></i><span class="nm">'+esc(b.name)+'</span>'+pill+'<span class="ar">'+fm(st.area)+' m²</span></button></li>';
+  });
+  $('#blkList').innerHTML=h||'<li class="muted">Sin bloques. Agrega uno abajo.</li>';
+}
+function updateTot(d){
+  var sum=0;state.blocks.forEach(function(b){sum+=b.w*b.d;});
+  var bad=0;state.blocks.forEach(function(b){var s=d.st[b.id];if(s.out||s.ov.length)bad++;});
+  $('#tot').innerHTML='<span>Superficie en bloques</span><b>'+fm(sum)+' m²</b>'+
+    '<span>Del terreno</span><b>'+(d.terrA?fm(sum/d.terrA*100,1):'0')+' %</b>'+
+    '<span>Del área edificable</span><b>'+(d.buildA?fm(sum/d.buildA*100,1)+' %':'—')+'</b>'+
+    '<span>Bloques por revisar</span><b'+(bad?' class="chg"':'')+'>'+bad+'</b>';
+}
+function first(t){for(var i=0;i<state.blocks.length;i++)if(state.blocks[i].type===t)return state.blocks[i];return null;}
+function updateDist(){
+  var items=[],o=first('ope'),h=first('hab'),e=first('ent'),p=first('pub'),s=first('ser');
+  function cc(b){return [b.cx,b.cy];}
+  if(o)items.push(['Operativa ↔ acceso vehicular',dist(cc(o),accPos('veh'))]);
+  if(p)items.push(['Pública ↔ acceso peatonal',dist(cc(p),accPos('peat'))]);
+  if(o)items.push(['Operativa ↔ acceso a marina',dist(cc(o),accPos('mar'))]);
+  if(o&&h)items.push(['Operativa ↔ habitacional',dist(cc(o),cc(h))]);
+  if(h&&e)items.push(['Habitacional ↔ entrenamiento',dist(cc(h),cc(e))]);
+  if(o&&s)items.push(['Operativa ↔ servicios',dist(cc(o),cc(s))]);
+  $('#dist').innerHTML=items.length?items.map(function(it){return '<li><span>'+it[0]+'</span><b>'+fm(it[1])+' m</b></li>';}).join(''):'<li class="muted">Agrega bloques para ver distancias.</li>';
+}
+function buildForm(){
+  var b=getBlock(sel);
+  if(!b){$('#blkForm').innerHTML='<p class="hint">Selecciona un bloque en el plano o en la lista.</p>';return;}
+  $('#blkForm').innerHTML=
+    '<div class="field"><label for="fName">Nombre</label><input class="in" id="fName" value="'+esc(b.name)+'"></div>'+
+    '<div class="row" style="margin-top:8px">'+
+    '<div class="field"><label for="fW">Ancho (m)</label><input class="in" id="fW" type="number" min="3" step="0.5" value="'+r2(b.w)+'"></div>'+
+    '<div class="field"><label for="fD">Fondo (m)</label><input class="in" id="fD" type="number" min="3" step="0.5" value="'+r2(b.d)+'"></div>'+
+    '<div class="field"><label for="fR">Giro (°)</label><input class="in" id="fR" type="number" step="1" value="'+r2(b.rot)+'"></div></div>'+
+    '<p class="hint" id="fArea" style="margin-top:8px"></p>'+
+    '<div class="bar" style="margin-top:8px"><button class="btn" id="fPar">Paralelo al frente</button><button class="btn" id="f90">Girar 90°</button><button class="btn danger" id="fDel">Eliminar</button></div>';
+  fillArea();
+}
+function fillArea(){var b=getBlock(sel),el=$('#fArea');if(b&&el)el.textContent='Superficie: '+fm(b.w*b.d)+' m²';}
+function syncForm(){
+  var b=getBlock(sel);if(!b||!$('#fW'))return;
+  [['fW',b.w],['fD',b.d],['fR',b.rot]].forEach(function(p){var el=$('#'+p[0]);if(el&&document.activeElement!==el)el.value=r2(p[1]);});
+  fillArea();
+}
+function refresh(){
+  var d=render();updateSide(d);updateList(d);updateTot(d);updateDist();syncForm();
+}
+$('#sub').textContent='Polígono de 5 lados, norte hacia arriba · frente a la avenida por el lado sur y acceso a marina por el noroeste';
+
+/* ---------- Interacción ---------- */
+var drag=null;
+function ptr(e){var r=svg.getBoundingClientRect();return [e.clientX-r.left,e.clientY-r.top];}
+svg.addEventListener('pointerdown',function(e){
+  if(e.pointerType==='mouse'&&e.button!==0)return;
+  var t=e.target.closest('[data-k]'),k=t?t.dataset.k:'bg',p=ptr(e),w=toW(p[0],p[1]);
+  drag={k:k,sx:p[0],sy:p[1],moved:false,w0:w,cx0:view.cx,cy0:view.cy};
+  if(k==='blk'){var b=getBlock(t.dataset.id);sel=b.id;drag.id=b.id;drag.o=[b.cx,b.cy];buildForm();refresh();}
+  else if(k==='vtx'){drag.i=+t.dataset.i;}
+  else if(k==='acc'){drag.id=t.dataset.id;}
+  else if(k==='rz'){
+    var bb=getBlock(sel),sg=t.dataset.c.split(',').map(Number),r=rotPt(-sg[0]*bb.w/2,-sg[1]*bb.d/2,bb.rot);
+    drag.id=sel;drag.sg=sg;drag.opp=[bb.cx+r[0],bb.cy+r[1]];
+  }
+  try{svg.setPointerCapture(e.pointerId);}catch(err){}
+  svg.focus({preventScroll:true});
+});
+svg.addEventListener('pointermove',function(e){
+  if(!drag)return;
+  var p=ptr(e);
+  if(!drag.moved&&Math.hypot(p[0]-drag.sx,p[1]-drag.sy)>3)drag.moved=true;
+  if(!drag.moved)return;
+  var w=toW(p[0],p[1]);
+  if(drag.k==='bg'){view.cx=drag.cx0-(p[0]-drag.sx)/view.k;view.cy=drag.cy0+(p[1]-drag.sy)/view.k;render();return;}
+  if(drag.k==='blk'){
+    var b=getBlock(drag.id);b.cx=r2(snap(drag.o[0]+w[0]-drag.w0[0]));b.cy=r2(snap(drag.o[1]+w[1]-drag.w0[1]));
+  }else if(drag.k==='vtx'){
+    state.verts[drag.i]=[r2(snap(w[0])),r2(snap(w[1]))];
+  }else if(drag.k==='acc'){
+    var a=state.acc[drag.id],P=state.verts,A=P[a.e],B=P[(a.e+1)%5],ex=B[0]-A[0],ey=B[1]-A[1];
+    var t=((w[0]-A[0])*ex+(w[1]-A[1])*ey)/(ex*ex+ey*ey);a.t=Math.max(0.04,Math.min(0.96,t));
+  }else if(drag.k==='rz'){
+    var bb=getBlock(drag.id),q=[snap(w[0]),snap(w[1])],rel=rotPt(q[0]-drag.opp[0],q[1]-drag.opp[1],-bb.rot);
+    bb.w=r2(Math.max(3,drag.sg[0]*rel[0]));bb.d=r2(Math.max(3,drag.sg[1]*rel[1]));
+    var c=rotPt(drag.sg[0]*bb.w/2,drag.sg[1]*bb.d/2,bb.rot);bb.cx=r2(drag.opp[0]+c[0]);bb.cy=r2(drag.opp[1]+c[1]);
+  }
+  refresh();
+});
+function endDrag(){
+  if(!drag)return;var d=drag;drag=null;
+  if(d.k==='bg'&&!d.moved&&sel){sel=null;buildForm();refresh();}
+  save();
+}
+svg.addEventListener('pointerup',endDrag);
+svg.addEventListener('pointercancel',function(){drag=null;});
+svg.addEventListener('wheel',function(e){e.preventDefault();var p=ptr(e);zoomAt(Math.exp(-e.deltaY*0.0016),p[0],p[1]);render();},{passive:false});
+svg.addEventListener('keydown',function(e){
+  var b=getBlock(sel);if(!b)return;
+  var st=+$('#snapSel').value||1,m={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,1],ArrowDown:[0,-1]}[e.key];
+  if(m){e.preventDefault();b.cx=r2(b.cx+m[0]*st);b.cy=r2(b.cy+m[1]*st);refresh();save();}
+  else if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();delBlock();}
+});
+$('#zIn').addEventListener('click',function(){zoomAt(1.25,W/2,H/2);render();});
+$('#zOut').addEventListener('click',function(){zoomAt(0.8,W/2,H/2);render();});
+$('#zFit').addEventListener('click',function(){fitView();render();});
+['#chkVtx','#chkBld','#chkGrid'].forEach(function(s){$(s).addEventListener('change',render);});
+
+$('#sideTbl').addEventListener('input',function(e){
+  var t=e.target;if(!t.id||t.id.indexOf('sb')!==0)return;
+  var v=parseFloat(t.value);state.setb[+t.id.slice(2)]=isNaN(v)||v<0?0:v;refresh();save();
+});
+$('#blkList').addEventListener('click',function(e){
+  var b=e.target.closest('[data-id]');if(!b)return;sel=b.dataset.id;buildForm();refresh();
+});
+function delBlock(){
+  var i=state.blocks.findIndex(function(b){return b.id===sel;});if(i<0)return;
+  state.blocks.splice(i,1);sel=state.blocks.length?state.blocks[Math.min(i,state.blocks.length-1)].id:null;
+  buildForm();refresh();save();
+}
+$('#blkForm').addEventListener('input',function(e){
+  var b=getBlock(sel);if(!b)return;var id=e.target.id,v=parseFloat(e.target.value);
+  if(id==='fName')b.name=e.target.value;
+  else if(id==='fW'&&!isNaN(v))b.w=Math.max(3,v);
+  else if(id==='fD'&&!isNaN(v))b.d=Math.max(3,v);
+  else if(id==='fR'&&!isNaN(v))b.rot=v;
+  refresh();save();
+});
+$('#blkForm').addEventListener('click',function(e){
+  var b=getBlock(sel);if(!b)return;var id=e.target.id;
+  if(id==='fPar'){b.rot=r2(normAng(edgeAngle(state.verts,2)+180));}
+  else if(id==='f90'){b.rot=r2(normAng(b.rot+90));}
+  else if(id==='fDel'){delBlock();return;}
+  else return;
+  syncForm();refresh();save();
+});
+(function(){
+  $('#addType').innerHTML=Object.keys(TYPES).map(function(k){return '<option value="'+k+'">'+TYPES[k].name+'</option>';}).join('');
+})();
+$('#addBtn').addEventListener('click',function(){
+  var k=$('#addType').value,T=TYPES[k],id='b'+(state.nextId++);
+  state.blocks.push({id:id,name:T.name,type:k,cx:r2(snap(view.cx)),cy:r2(snap(view.cy)),w:T.w,d:T.d,rot:0});
+  sel=id;buildForm();refresh();save();toast('Bloque agregado al centro de la vista. Arrástralo a su lugar.');
+});
+$('#resetTerr').addEventListener('click',function(){
+  state.verts=V0.map(function(c){return c.slice();});refresh();save();toast('Terreno restablecido a las medidas originales.');
+});
+$('#resetAll').addEventListener('click',function(){
+  state=defaultState();sel=state.blocks[0].id;buildSide();buildForm();fitView();refresh();save();toast('Se restableció la zonificación inicial.');
+});
+
+/* ---------- Exportar ---------- */
+function saveFile(name,data){
+  var uf=window.claude&&window.claude.use;
+  if(!uf){
+    var blob=data instanceof Blob?data:new Blob([data]);
+    var url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
+    setTimeout(function(){URL.revokeObjectURL(url);},2000);toast('Se generó '+name+'.');return;
+  }
+  uf.call(window.claude,'downloads').then(function(dl){
+    if(!dl){toast('La descarga no está disponible aquí.');return;}
+    return dl.save({filename:name,data:data}).then(function(){toast('Archivo guardado.');},function(err){
+      if(err&&err.code==='declined')return;toast('No se pudo guardar el archivo.');
+    });
+  },function(){toast('La descarga no está disponible aquí.');});
+}
+function exportSvgString(){
+  var tmp=document.createElementNS(NS,'svg');
+  tmp.setAttribute('xmlns',NS);tmp.setAttribute('width',W);tmp.setAttribute('height',H);tmp.setAttribute('viewBox','0 0 '+W+' '+H);
+  tmp.style.cssText='position:fixed;left:-99999px;top:0';
+  tmp.innerHTML=buildMarkup({clean:true});
+  document.body.appendChild(tmp);
+  var props=['fill','stroke','stroke-width','stroke-dasharray','opacity','font-family','font-size','font-weight','letter-spacing','text-anchor'];
+  Array.prototype.forEach.call(tmp.querySelectorAll('*'),function(el){
+    var cs=getComputedStyle(el);props.forEach(function(p){var v=cs.getPropertyValue(p);if(v)el.style.setProperty(p,v);});
+  });
+  var bg=document.createElementNS(NS,'rect');
+  bg.setAttribute('width',W);bg.setAttribute('height',H);bg.setAttribute('fill',getComputedStyle(document.body).backgroundColor);
+  tmp.insertBefore(bg,tmp.firstChild);tmp.removeAttribute('style');
+  var s=new XMLSerializer().serializeToString(tmp);tmp.remove();return s;
+}
+$('#exSvg').addEventListener('click',function(){saveFile('zonificacion-terreno.svg',exportSvgString());});
+$('#exPng').addEventListener('click',function(){
+  try{
+    var s=exportSvgString(),url=URL.createObjectURL(new Blob([s],{type:'image/svg+xml;charset=utf-8'})),img=new Image();
+    img.onload=function(){
+      var c=document.createElement('canvas');c.width=W*2;c.height=H*2;c.getContext('2d').drawImage(img,0,0,W*2,H*2);
+      URL.revokeObjectURL(url);
+      c.toBlob(function(b){if(b)saveFile('zonificacion-terreno.png',b);else toast('No se pudo generar el PNG. Prueba con SVG.');},'image/png');
+    };
+    img.onerror=function(){URL.revokeObjectURL(url);toast('No se pudo generar el PNG. Prueba con SVG.');};
+    img.src=url;
+  }catch(err){toast('No se pudo generar el PNG. Prueba con SVG.');}
+});
+$('#exCsv').addEventListener('click',function(){
+  var d=derived(),rows=[['Elemento','Tipo','Ancho (m)','Fondo (m)','Giro (°)','Superficie (m²)','Estado']];
+  state.blocks.forEach(function(b){
+    var st=d.st[b.id],est=st.out?'Fuera del área edificable':(st.ov.length?'Se traslapa con '+st.ov.map(function(o){return o.name;}).join(', '):'Correcto');
+    rows.push([b.name,TYPES[b.type].name,r2(b.w),r2(b.d),r2(b.rot),r2(b.w*b.d),est]);
+  });
+  rows.push(['Superficie del terreno','','','','',r2(d.terrA),'']);
+  rows.push(['Área edificable','','','','',r2(d.buildA),'']);
+  var csv='﻿'+rows.map(function(r){return r.map(function(v){return '"'+String(v).replace(/"/g,'""')+'"';}).join(',');}).join('\r\n');
+  saveFile('superficies-zonificacion.csv',csv);
+});
+
+/* ---------- Inicio ---------- */
+buildSide();buildForm();measure();fitView();refresh();
+if(window.ResizeObserver){
+  var rt=null;new ResizeObserver(function(){clearTimeout(rt);rt=setTimeout(function(){var ow=W,oh=H;measure();if(Math.abs(ow-W)>1||Math.abs(oh-H)>1){fitView();render();}},120);}).observe(stage);
+}
+})();
+</script>
+</body></html>
