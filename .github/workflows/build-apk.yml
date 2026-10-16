@@ -5,6 +5,9 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -33,3 +36,13 @@ jobs:
           name: estacion-bomberos-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Publicar el APK en Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk estacion-bomberos.apk
+          gh release delete apk-latest --yes --cleanup-tag || true
+          gh release create apk-latest estacion-bomberos.apk \
+            --title "APK de la estación de bomberos" \
+            --notes "Instalador para Android 10 o más reciente. Descárgalo desde el teléfono y ábrelo."
